@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: cycle-together-telegram
+    runtime: docker
+    rootDir: telegram-cycle-together
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATA_DIR
+        value: /data
+      - key: PORT
+        value: 8000
+      - key: MAX_MEMBERS
+        value: 2
+      - key: BOT_TOKEN
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+    disk:
+      name: cycle-data
+      mountPath: /data
+      sizeGB: 1

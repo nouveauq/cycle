@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cycle Together Telegram</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Общий календарь в Telegram</p>
+          <h1>Cycle Together</h1>
+          <p class="hero-text">Трекер менструального цикла для двоих.</p>
+        </div>
+      </header>
+
+      <section class="status-strip" id="telegramStatus">Подключаю календарь…</section>
+
+      <section class="stats-grid" id="statsGrid"></section>
+
+      <main class="layout">
+        <section class="card card-wide" id="calendar">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Календарь</p>
+              <h2>Текущий месяц</h2>
+            </div>
+            <div class="calendar-nav">
+              <button class="ghost-button icon-button" id="prevMonth" type="button" aria-label="Предыдущий месяц" title="Предыдущий месяц">
+                ‹
+              </button>
+              <button class="ghost-button" id="todayMonth" type="button">Сегодня</button>
+              <button class="ghost-button icon-button" id="nextMonth" type="button" aria-label="Следующий месяц" title="Следующий месяц">
+                ›
+              </button>
+            </div>
+          </div>
+
+          <div class="calendar-meta">
+            <h3 id="calendarMonthLabel">Месяц</h3>
+            <div class="legend">
+              <span class="legend-item"><i class="dot actual"></i>Менструация</span>
+              <span class="legend-item"><i class="dot predicted"></i>Прогноз</span>
+              <span class="legend-item"><i class="dot fertile"></i>Фертильное окно</span>
+              <span class="legend-item"><i class="dot ovulation"></i>Овуляция</span>
+              <span class="legend-item"><i class="dot log"></i>Запись</span>
+              <span class="legend-item"><i class="symbol-heart" aria-hidden="true">&#9829;</i>Секс</span>
+            </div>
+          </div>
+
+          <div class="weekdays">
+            <span>Пн</span>
+            <span>Вт</span>
+            <span>Ср</span>
+            <span>Чт</span>
+            <span>Пт</span>
+            <span>Сб</span>
+            <span>Вс</span>
+          </div>
+          <div class="calendar-grid" id="calendarGrid"></div>
+          <div class="calendar-insights" id="calendarInsights"></div>
+        </section>
+
+        <section class="card" id="periods">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Менструация</p>
+              <h2>Добавить цикл</h2>
+            </div>
+          </div>
+          <form id="periodForm" class="stack-form">
+            <input type="hidden" id="periodId" />
+            <label>
+              Начало
+              <input type="date" id="periodStart" required />
+            </label>
+            <label>
+              Конец
+              <input type="date" id="periodEnd" required />
+            </label>
+            <label>
+              Интенсивность
+              <select id="periodFlow">
+                <option value="spotting">Мажущие выделения</option>
+                <option value="light">Лёгкая</option>
+                <option value="medium" selected>Средняя</option>
+                <option value="heavy">Сильная</option>
+              </select>
+            </label>
+            <label>
+              Заметка
+              <textarea
+                id="periodNote"
+                rows="3"
+                placeholder="Например: началась на день раньше"
+              ></textarea>
+            </label>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">Сохранить цикл</button>
+              <button class="ghost-button hidden" id="cancelPeriodEdit" type="button">Отмена</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card" id="day-log">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Симптомы и состояние</p>
+              <h2>Запись за день</h2>
+            </div>
+          </div>
+          <form id="logForm" class="stack-form">
+            <input type="hidden" id="logId" />
+            <label>
+              Дата
+              <input type="date" id="logDate" required />
+            </label>
+            <div class="grid-two">
+              <label>
+                Самочувствие
+                <select id="logWellbeing">
+                  <option value="1">1 - очень тяжело</option>
+                  <option value="2">2 - скорее плохо</option>
+                  <option value="3" selected>3 - нормально</option>
+                  <option value="4">4 - хорошо</option>
+                  <option value="5">5 - отлично</option>
+                </select>
+              </label>
+              <label>
+                Энергия
+                <select id="logEnergy">
+                  <option value="1">1 - нет сил</option>
+                  <option value="2">2 - мало</option>
+                  <option value="3" selected>3 - средне</option>
+                  <option value="4">4 - бодро</option>
+                  <option value="5">5 - очень много</option>
+                </select>
+              </label>
+              <label>
+                Настроение
+                <select id="logMood">
+                  <option value="1">1 - очень низкое</option>
+                  <option value="2">2 - подавленное</option>
+                  <option value="3" selected>3 - ровное</option>
+                  <option value="4">4 - хорошее</option>
+                  <option value="5">5 - отличное</option>
+                </select>
+              </label>
+              <label>
+                Сексуальное влечение
+                <select id="logLibido">
+                  <option value="1">1 - совсем нет</option>
+                  <option value="2">2 - низкое</option>
+                  <option value="3" selected>3 - среднее</option>
+                  <option value="4">4 - высокое</option>
+                  <option value="5">5 - очень высокое</option>
+                </select>
+              </label>
+            </div>
+            <label>
+              Боль / спазмы
+              <select id="logPain">
+                <option value="0">0 - нет</option>
+                <option value="1">1 - едва заметно</option>
+                <option value="2">2 - терпимо</option>
+                <option value="3" selected>3 - ощутимо</option>
+                <option value="4">4 - сильно</option>
+                <option value="5">5 - очень сильно</option>
+              </select>
+            </label>
+
+            <fieldset class="symptom-group">
+              <legend>Симптомы</legend>
+              <div class="symptom-list" id="symptomList"></div>
+            </fieldset>
+
+            <label>
+              Заметка
+              <textarea
+                id="logNote"
+                rows="3"
+                placeholder="Например: болела голова, хотелось сладкого"
+              ></textarea>
+            </label>
+            <div class="form-actions">
+              <button class="primary-button" type="submit">Сохранить запись</button>
+              <button class="ghost-button hidden" id="cancelLogEdit" type="button">Отмена</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card" id="sharing">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Общий доступ</p>
+              <h2>Календарь для двоих</h2>
+            </div>
+          </div>
+          <div class="members-list" id="membersList"></div>
+          <div class="invite-box hidden" id="inviteOutput">
+            <p class="invite-code" id="inviteCode"></p>
+            <input id="inviteLink" readonly />
+            <div class="form-actions">
+              <button class="ghost-button" id="copyInvite" type="button">Копировать</button>
+              <button class="ghost-button" id="shareInvite" type="button">Отправить</button>
+            </div>
+          </div>
+          <button class="primary-button" id="createInvite" type="button">Создать ссылку</button>
+          <p class="panel-note" id="inviteStatus"></p>
+        </section>
+
+        <section class="card" id="settings">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Настройки прогноза</p>
+              <h2>Базовые значения</h2>
+            </div>
+          </div>
+          <form id="settingsForm" class="stack-form compact">
+            <label>
+              Типичная длина цикла, дней
+              <input type="number" id="cycleLengthSetting" min="20" max="45" required />
+            </label>
+            <label>
+              Типичная длина месячных, дней
+              <input type="number" id="periodLengthSetting" min="2" max="10" required />
+            </label>
+            <label>
+              Лютеиновая фаза, дней
+              <input type="number" id="lutealLengthSetting" min="10" max="18" required />
+            </label>
+            <button class="primary-button" type="submit">Сохранить настройки</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <details class="journal-panel" id="periodPanel">
+            <summary class="journal-summary">
+              <div>
+                <p class="section-kicker">История</p>
+                <h2>Предыдущие циклы</h2>
+                <p class="journal-summary-meta" id="periodSummaryMeta">Пока нет записей.</p>
+              </div>
+              <span class="journal-summary-action" id="periodSummaryAction">Развернуть</span>
+            </summary>
+            <div class="journal-body">
+              <div class="journal-toolbar">
+                <label class="journal-filter">
+                  Год
+                  <select id="periodYearFilter"></select>
+                </label>
+              </div>
+              <div id="periodHistory" class="data-list empty-state">Пока нет записей о менструации.</div>
+            </div>
+          </details>
+        </section>
+
+        <section class="card">
+          <details class="journal-panel" id="logPanel">
+            <summary class="journal-summary">
+              <div>
+                <p class="section-kicker">Журнал</p>
+                <h2>Записи самочувствия</h2>
+                <p class="journal-summary-meta" id="logSummaryMeta">Пока нет записей.</p>
+              </div>
+              <span class="journal-summary-action" id="logSummaryAction">Развернуть</span>
+            </summary>
+            <div class="journal-body">
+              <div class="journal-toolbar">
+                <label class="journal-filter">
+                  Месяц и год
+                  <select id="logMonthFilter"></select>
+                </label>
+              </div>
+              <div id="logHistory" class="data-list empty-state">Пока нет ежедневных записей.</div>
+            </div>
+          </details>
+        </section>
+
+        <section class="card card-wide" id="charts">
+          <div class="section-head">
+            <div>
+              <p class="section-kicker">Аналитика</p>
+              <h2>Графики и выводы</h2>
+            </div>
+          </div>
+          <div class="chart-grid">
+            <div class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <h3>Длина циклов</h3>
+                  <p class="chart-copy">6 или 12 месяцев</p>
+                </div>
+                <div class="chart-controls" id="cycleChartControls">
+                  <button class="chart-toggle is-active" type="button" data-cycle-range="6m">6 мес.</button>
+                  <button class="chart-toggle" type="button" data-cycle-range="12m">12 мес.</button>
+                </div>
+              </div>
+              <div id="cycleChart" class="chart-box empty-state"></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-head">
+                <div>
+                  <h3>Частые симптомы</h3>
+                  <p class="chart-copy">По дневнику самочувствия</p>
+                </div>
+                <div class="chart-controls" id="symptomChartControls">
+                  <button class="chart-toggle is-active" type="button" data-symptom-range="6m">6 мес.</button>
+                  <button class="chart-toggle" type="button" data-symptom-range="12m">12 мес.</button>
+                  <button class="chart-toggle" type="button" data-symptom-range="all">Всё</button>
+                </div>
+              </div>
+              <div id="symptomChart" class="chart-box empty-state"></div>
+            </div>
+          </div>
+          <div id="insightsList" class="insights-list"></div>
+        </section>
+      </main>
+
+      <section class="card" id="backup">
+        <div class="section-head">
+          <div>
+            <p class="section-kicker">Резервная копия</p>
+            <h2>Экспорт и импорт</h2>
+          </div>
+        </div>
+        <p class="backup-meta" id="lastBackupMeta">Последний backup: ещё не создавался.</p>
+        <div class="backup-actions">
+          <button class="primary-button" id="exportBackup" type="button">Экспортировать JSON</button>
+          <button class="ghost-button" id="importBackup" type="button">Импортировать JSON</button>
+        </div>
+        <input
+          class="hidden"
+          id="backupFileInput"
+          type="file"
+          accept=".json,.cycle-together.json,application/json,text/json"
+        />
+        <p class="backup-note" id="backupStatus">
+          Формат совместим с Delta Chat-версией Cycle Together.
+        </p>
+      </section>
+
+      <section class="card sync-panel">
+        <p class="section-kicker">Статус синхронизации</p>
+        <p class="sync-panel-value" id="syncStatus">Загрузка…</p>
+        <p class="sync-panel-meta" id="syncMeta">Данные хранятся на сервере бота.</p>
+      </section>
+
+      <footer class="footnote">
+        Прогнозы приблизительные и не заменяют консультацию врача.
+      </footer>
+    </div>
+  </body>
+</html>
