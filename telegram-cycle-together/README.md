@@ -119,6 +119,29 @@ PORT=8000
 
 GitHub Pages или обычный статический хостинг не подходят: этому приложению нужен backend для Telegram-подписи, общей базы и бота.
 
+## PythonAnywhere
+
+Для PythonAnywhere используется `flask_app.py`: это WSGI-версия того же приложения. Бот работает через Telegram webhook, поэтому отдельный always-on task не нужен.
+
+В файле `.env` на PythonAnywhere укажи:
+
+```text
+BOT_TOKEN=токен-от-BotFather
+BOT_USERNAME=username_бота_без_@
+PUBLIC_URL=https://USERNAME.pythonanywhere.com
+DATA_DIR=/home/USERNAME/cycle-together-data
+PORT=8000
+```
+
+После настройки web app запусти в Bash-консоли:
+
+```bash
+cd ~/cycle-together/telegram-cycle-together
+python setup_pythonanywhere_webhook.py
+```
+
+Этот скрипт подключит webhook и кнопку меню бота.
+
 ## Деплой через Docker
 
 ```powershell
