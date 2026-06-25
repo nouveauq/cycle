@@ -72,6 +72,13 @@ def json_response(value: object, status: int = 200):
     return app.response_class(server.json_dumps(value), status=status, mimetype="application/json")
 
 
+@app.after_request
+def add_cache_headers(response):
+    if request.path == "/" or request.path.endswith((".html", ".css", ".js")) or response.mimetype == "application/json":
+        response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
 @app.errorhandler(server.ApiError)
 def handle_api_error(error: server.ApiError):
     return json_response({"ok": False, "error": error.message, "code": error.code}, error.status)
@@ -176,7 +183,17 @@ def api_settings():
         data["settings"] = server.normalize_settings(body.get("settings", body))
 
     with server.get_conn() as conn:
-        return json_response({"ok": True, "calendar": server.mutate_calendar(conn, user, update_settings)})
+        return json_response(
+            {
+                "ok": True,
+                "calendar": server.mutate_calendar(
+                    conn,
+                    user,
+                    update_settings,
+                    user["name"] + " изменил(а) настройки прогноза.",
+                ),
+            }
+        )
 
 
 @app.post("/api/periods")
@@ -196,7 +213,17 @@ def api_periods():
         data.setdefault("periods", {})[item["id"]] = item
 
     with server.get_conn() as conn:
-        return json_response({"ok": True, "calendar": server.mutate_calendar(conn, user, upsert_period)})
+        return json_response(
+            {
+                "ok": True,
+                "calendar": server.mutate_calendar(
+                    conn,
+                    user,
+                    upsert_period,
+                    user["name"] + " обновил(а) цикл " + server.safe_text(record.get("startDate"), "", 10) + ".",
+                ),
+            }
+        )
 
 
 @app.post("/api/logs")
@@ -216,7 +243,17 @@ def api_logs():
         data.setdefault("logs", {})[item["id"]] = item
 
     with server.get_conn() as conn:
-        return json_response({"ok": True, "calendar": server.mutate_calendar(conn, user, upsert_log)})
+        return json_response(
+            {
+                "ok": True,
+                "calendar": server.mutate_calendar(
+                    conn,
+                    user,
+                    upsert_log,
+                    user["name"] + " обновил(а) запись за " + server.safe_text(record.get("date"), "", 10) + ".",
+                ),
+            }
+        )
 
 
 @app.post("/api/import")
@@ -230,7 +267,17 @@ def api_import():
         data.update(server.normalize_snapshot(raw_snapshot, user))
 
     with server.get_conn() as conn:
-        return json_response({"ok": True, "calendar": server.mutate_calendar(conn, user, replace_data)})
+        return json_response(
+            {
+                "ok": True,
+                "calendar": server.mutate_calendar(
+                    conn,
+                    user,
+                    replace_data,
+                    user["name"] + " импортировал(а) backup календаря.",
+                ),
+            }
+        )
 
 
 @app.delete("/api/periods/<path:record_id>")
@@ -242,7 +289,17 @@ def api_delete_period(record_id: str):
         data.setdefault("periods", {}).pop(record_id, None)
 
     with server.get_conn() as conn:
-        return json_response({"ok": True, "calendar": server.mutate_calendar(conn, user, delete_period)})
+        return json_response(
+            {
+                "ok": True,
+                "calendar": server.mutate_calendar(
+                    conn,
+                    user,
+                    delete_period,
+                    user["name"] + " удалил(а) запись цикла.",
+                ),
+            }
+        )
 
 
 @app.delete("/api/logs/<path:record_id>")
@@ -254,7 +311,17 @@ def api_delete_log(record_id: str):
         data.setdefault("logs", {}).pop(record_id, None)
 
     with server.get_conn() as conn:
-        return json_response({"ok": True, "calendar": server.mutate_calendar(conn, user, delete_log)})
+        return json_response(
+            {
+                "ok": True,
+                "calendar": server.mutate_calendar(
+                    conn,
+                    user,
+                    delete_log,
+                    user["name"] + " удалил(а) запись дня.",
+                ),
+            }
+        )
 
 
 @app.post("/telegram-webhook/<secret>")

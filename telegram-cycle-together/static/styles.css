@@ -722,6 +722,7 @@ textarea:focus {
   padding: 14px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.72);
+  overflow: hidden;
 }
 
 .chart-head {
@@ -765,24 +766,25 @@ textarea:focus {
 }
 
 .chart-box {
-  min-height: 220px;
+  min-height: 0;
 }
 
 .chart-summary {
-  margin: 0 0 10px;
+  margin: 0 0 12px;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: 1rem;
+  line-height: 1.35;
 }
 
 .chart-svg {
   width: 100%;
-  height: auto;
+  height: clamp(280px, 54vw, 420px);
   display: block;
 }
 
 .chart-axis {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .chart-gridline {
@@ -793,7 +795,7 @@ textarea:focus {
 .chart-line {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 3;
+  stroke-width: 5;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -808,7 +810,7 @@ textarea:focus {
 
 .bar-label {
   fill: var(--muted);
-  font-size: 11px;
+  font-size: 15px;
 }
 
 .insights-list {
@@ -920,12 +922,20 @@ textarea:focus {
   }
 
   .chart-controls,
-  .chart-toggle,
   .journal-summary-action,
   .journal-filter,
   .backup-actions .primary-button,
   .backup-actions .ghost-button {
     width: 100%;
+  }
+
+  .chart-controls {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  }
+
+  .chart-toggle {
+    width: auto;
   }
 
   .journal-toolbar {

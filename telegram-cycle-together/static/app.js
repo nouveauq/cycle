@@ -695,7 +695,7 @@
     elements.syncStatus.textContent = state.syncStatus;
     elements.syncMeta.textContent = state.syncMeta;
     elements.telegramStatus.textContent = state.user
-      ? "Открыто для: " + state.user.name + ". Ревизия календаря: " + state.revision + "."
+      ? "Открыто для: " + state.user.name + ". Все изменения сохраняются автоматически."
       : state.syncMeta;
   }
 
@@ -1190,12 +1190,12 @@
     if (series.length < 2) {
       return "Нужно минимум 2 цикла, чтобы построить график.";
     }
-    var width = 640;
-    var height = 220;
-    var padLeft = 40;
-    var padRight = 18;
-    var padTop = 20;
-    var padBottom = 36;
+    var width = 760;
+    var height = 360;
+    var padLeft = 54;
+    var padRight = 24;
+    var padTop = 28;
+    var padBottom = 52;
     var values = series.map(function (item) { return item.value; });
     var minValue = Math.max(15, Math.min.apply(null, values) - 2);
     var maxValue = Math.max.apply(null, values) + 2;
@@ -1243,7 +1243,7 @@
           point.x +
           '" cy="' +
           point.y +
-          '" r="4"></circle>' +
+          '" r="6"></circle>' +
           label
         );
       })
@@ -1281,23 +1281,23 @@
     if (!entries.length) {
       return logCount ? "За выбранный период нет отмеченных симптомов." : "Добавь несколько записей за дни цикла.";
     }
-    var width = 640;
-    var rowHeight = 30;
-    var height = 34 + entries.length * rowHeight;
-    var labelWidth = 170;
+    var width = 760;
+    var rowHeight = 46;
+    var height = 42 + entries.length * rowHeight;
+    var labelWidth = 230;
     var maxValue = Math.max.apply(
       null,
       entries.map(function (entry) { return entry.value; })
     );
     var bars = entries
       .map(function (entry, index) {
-        var y = 24 + index * rowHeight;
-        var barWidth = ((width - labelWidth - 56) * entry.value) / maxValue;
+        var y = 26 + index * rowHeight;
+        var barWidth = ((width - labelWidth - 70) * entry.value) / maxValue;
         return (
           '<text class="bar-label" x="0" y="' +
           (y + 15) +
           '">' +
-          escapeHtml(shorten(entry.label, 22)) +
+          escapeHtml(shorten(entry.label, 24)) +
           "</text>" +
           '<rect class="bar" x="' +
           labelWidth +
@@ -1305,11 +1305,11 @@
           y +
           '" width="' +
           barWidth +
-          '" height="18" rx="6"></rect>' +
+          '" height="28" rx="9"></rect>' +
           '<text class="bar-label" x="' +
           (labelWidth + barWidth + 8) +
           '" y="' +
-          (y + 14) +
+          (y + 20) +
           '">' +
           entry.value +
           "</text>"

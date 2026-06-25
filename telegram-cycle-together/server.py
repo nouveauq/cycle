@@ -109,6 +109,13 @@ def pretty_json(value: object) -> bytes:
     return json.dumps(value, ensure_ascii=False, indent=2).encode("utf-8")
 
 
+def should_disable_cache(content_type: str) -> bool:
+    return content_type.startswith("application/json") or any(
+        content_type.startswith(prefix)
+        for prefix in ("text/html", "text/css", "application/javascript", "text/javascript")
+    )
+
+
 def clamp_number(value: object, minimum: int, maximum: int, fallback: int) -> int:
     try:
         number = int(round(float(value)))
@@ -561,6 +568,19 @@ def calendar_members(conn: sqlite3.Connection, calendar_id: str) -> list[dict]:
     ]
 
 
+def notify_calendar_members(conn: sqlite3.Connection, calendar_id: str, actor_user_id: str, text: str) -> None:
+    if not BOT_TOKEN or not text:
+        return
+    for member in calendar_members(conn, calendar_id):
+        user_id = str(member["userId"])
+        if user_id == str(actor_user_id) or not user_id.isdigit():
+            continue
+        try:
+            send_bot_message(int(user_id), text)
+        except Exception as error:
+            print("Could not send calendar notification:", repr(error))
+
+
 def response_calendar(conn: sqlite3.Connection, user: dict, calendar_id: str) -> dict:
     calendar = load_calendar(conn, user, calendar_id)
     snapshot = snapshot_for_export(calendar["data"], user)
@@ -586,12 +606,15 @@ def save_calendar_data(conn: sqlite3.Connection, calendar_id: str, data: dict) -
     )
 
 
-def mutate_calendar(conn: sqlite3.Connection, user: dict, mutator) -> dict:
+def mutate_calendar(conn: sqlite3.Connection, user: dict, mutator, notification_text: str = "") -> dict:
     calendar_id = ensure_calendar(conn, user)
     calendar = load_calendar(conn, user, calendar_id)
     data = calendar["data"]
     mutator(data)
     save_calendar_data(conn, calendar_id, data)
+    conn.commit()
+    if notification_text:
+        notify_calendar_members(conn, calendar_id, user["id"], notification_text)
     return response_calendar(conn, user, calendar_id)
 
 
@@ -743,7 +766,17 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                 def update_settings(data: dict) -> None:
                     data["settings"] = normalize_settings(body.get("settings", body))
 
-                self.send_json({"ok": True, "calendar": mutate_calendar(conn, user, update_settings)})
+                self.send_json(
+                    {
+                        "ok": True,
+                        "calendar": mutate_calendar(
+                            conn,
+                            user,
+                            update_settings,
+                            user["name"] + " изменил(а) настройки прогноза.",
+                        ),
+                    }
+                )
                 return
             if parsed.path == "/api/periods":
                 record = body.get("record", body)
@@ -758,7 +791,17 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                     item["updatedAt"] = iso_now()
                     data.setdefault("periods", {})[item["id"]] = item
 
-                self.send_json({"ok": True, "calendar": mutate_calendar(conn, user, upsert_period)})
+                self.send_json(
+                    {
+                        "ok": True,
+                        "calendar": mutate_calendar(
+                            conn,
+                            user,
+                            upsert_period,
+                            user["name"] + " обновил(а) цикл " + safe_text(record.get("startDate"), "", 10) + ".",
+                        ),
+                    }
+                )
                 return
             if parsed.path == "/api/logs":
                 record = body.get("record", body)
@@ -773,7 +816,17 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                     item["updatedAt"] = iso_now()
                     data.setdefault("logs", {})[item["id"]] = item
 
-                self.send_json({"ok": True, "calendar": mutate_calendar(conn, user, upsert_log)})
+                self.send_json(
+                    {
+                        "ok": True,
+                        "calendar": mutate_calendar(
+                            conn,
+                            user,
+                            upsert_log,
+                            user["name"] + " обновил(а) запись за " + safe_text(record.get("date"), "", 10) + ".",
+                        ),
+                    }
+                )
                 return
             if parsed.path == "/api/import":
                 raw_snapshot = body.get("snapshot", body)
@@ -782,7 +835,17 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                     data.clear()
                     data.update(normalize_snapshot(raw_snapshot, user))
 
-                self.send_json({"ok": True, "calendar": mutate_calendar(conn, user, replace_data)})
+                self.send_json(
+                    {
+                        "ok": True,
+                        "calendar": mutate_calendar(
+                            conn,
+                            user,
+                            replace_data,
+                            user["name"] + " импортировал(а) backup календаря.",
+                        ),
+                    }
+                )
                 return
         raise ApiError(404, "Маршрут не найден.", "not_found")
 
@@ -796,7 +859,17 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                 def delete_period(data: dict) -> None:
                     data.setdefault("periods", {}).pop(record_id, None)
 
-                self.send_json({"ok": True, "calendar": mutate_calendar(conn, user, delete_period)})
+                self.send_json(
+                    {
+                        "ok": True,
+                        "calendar": mutate_calendar(
+                            conn,
+                            user,
+                            delete_period,
+                            user["name"] + " удалил(а) запись цикла.",
+                        ),
+                    }
+                )
                 return
             if path.startswith("/api/logs/"):
                 record_id = urllib.parse.unquote(path.removeprefix("/api/logs/"))
@@ -804,7 +877,17 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                 def delete_log(data: dict) -> None:
                     data.setdefault("logs", {}).pop(record_id, None)
 
-                self.send_json({"ok": True, "calendar": mutate_calendar(conn, user, delete_log)})
+                self.send_json(
+                    {
+                        "ok": True,
+                        "calendar": mutate_calendar(
+                            conn,
+                            user,
+                            delete_log,
+                            user["name"] + " удалил(а) запись дня.",
+                        ),
+                    }
+                )
                 return
         raise ApiError(404, "Маршрут не найден.", "not_found")
 
@@ -832,7 +915,7 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store" if content_type.startswith("application/json") else "public, max-age=60")
+        self.send_header("Cache-Control", "no-store, max-age=0" if should_disable_cache(content_type) else "public, max-age=60")
         for key, value in (extra_headers or {}).items():
             self.send_header(key, value)
         self.end_headers()

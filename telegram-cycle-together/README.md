@@ -142,6 +142,21 @@ python setup_pythonanywhere_webhook.py
 
 Этот скрипт подключит webhook и кнопку меню бота.
 
+### Как обновлять код на PythonAnywhere
+
+После изменений в GitHub зайди в Bash-консоль PythonAnywhere:
+
+```bash
+cd ~/cycle-together
+git pull
+workon cycle-together-env
+cd telegram-cycle-together
+pip install -r requirements.txt
+python setup_pythonanywhere_webhook.py
+```
+
+Потом открой вкладку `Web` и нажми `Reload`. Файл `.env` и база в `DATA_DIR` при `git pull` не стираются.
+
 ## Деплой через Docker
 
 ```powershell
