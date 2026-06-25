@@ -18,6 +18,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 
 APP_ID = "cycle-together"
@@ -53,6 +54,7 @@ MAX_MEMBERS = int(os.environ.get("MAX_MEMBERS", "2"))
 MAX_BODY_BYTES = 2 * 1024 * 1024
 AUTH_TTL_SECONDS = int(os.environ.get("AUTH_TTL_SECONDS", str(7 * 24 * 60 * 60)))
 INVITE_TTL_DAYS = int(os.environ.get("INVITE_TTL_DAYS", "30"))
+REMINDER_TZ = os.environ.get("REMINDER_TZ", "Europe/Moscow").strip() or "Europe/Moscow"
 
 FLOW_KEYS = {"spotting", "light", "medium", "heavy"}
 SYMPTOM_KEYS = {
@@ -87,6 +89,14 @@ def utc_now() -> datetime:
 
 def iso_now() -> str:
     return utc_now().replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def today_for_reminders() -> str:
+    try:
+        tz = ZoneInfo(REMINDER_TZ)
+    except ZoneInfoNotFoundError:
+        tz = timezone.utc
+    return datetime.now(tz).date().isoformat()
 
 
 def iso_from_datetime(value: datetime) -> str:
@@ -138,6 +148,21 @@ def compare_dates(left: str, right: str) -> int:
     if left == right:
         return 0
     return -1 if left < right else 1
+
+
+def add_iso_days(iso_date: str, days: int) -> str:
+    value = datetime.strptime(iso_date, "%Y-%m-%d").date()
+    return (value + timedelta(days=days)).isoformat()
+
+
+def diff_iso_days(start_iso: str, end_iso: str) -> int:
+    start = datetime.strptime(start_iso, "%Y-%m-%d").date()
+    end = datetime.strptime(end_iso, "%Y-%m-%d").date()
+    return (end - start).days
+
+
+def average_int(values: list[int]) -> int:
+    return int(round(sum(values) / len(values))) if values else 0
 
 
 def safe_text(value: object, fallback: str = "", limit: int = 4000) -> str:
@@ -323,6 +348,18 @@ def init_db() -> None:
               created_at TEXT NOT NULL,
               expires_at TEXT NOT NULL,
               last_used_at TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS reminder_log (
+              calendar_id TEXT NOT NULL,
+              user_id TEXT NOT NULL,
+              reminder_type TEXT NOT NULL,
+              target_date TEXT NOT NULL,
+              sent_at TEXT NOT NULL,
+              PRIMARY KEY (calendar_id, user_id, reminder_type, target_date)
             )
             """
         )
@@ -581,6 +618,114 @@ def notify_calendar_members(conn: sqlite3.Connection, calendar_id: str, actor_us
             print("Could not send calendar notification:", repr(error))
 
 
+def calendar_predictions(data: dict) -> dict:
+    snapshot = normalize_snapshot(data)
+    periods = list(snapshot["periods"].values())
+    if not periods:
+        return {}
+    periods.sort(key=lambda record: record["startDate"])
+    cycle_lengths: list[int] = []
+    for index in range(1, len(periods)):
+        cycle_lengths.append(diff_iso_days(periods[index - 1]["startDate"], periods[index]["startDate"]))
+    durations = [diff_iso_days(period["startDate"], period["endDate"]) + 1 for period in periods]
+    recent_cycle_lengths = cycle_lengths[-6:]
+    recent_durations = durations[-6:]
+    average_cycle = average_int(recent_cycle_lengths) or int(snapshot["settings"]["cycleLength"])
+    average_duration = average_int(recent_durations) or int(snapshot["settings"]["periodLength"])
+    last_period = periods[-1]
+    next_period_start = add_iso_days(last_period["startDate"], average_cycle)
+    next_period_end = add_iso_days(next_period_start, max(1, average_duration) - 1)
+    ovulation_date = add_iso_days(next_period_start, -int(snapshot["settings"]["lutealLength"]))
+    return {
+        "nextPeriodStart": next_period_start,
+        "nextPeriodEnd": next_period_end,
+        "threeDaysBeforePeriod": add_iso_days(next_period_start, -3),
+        "ovulationDate": ovulation_date,
+    }
+
+
+def get_all_calendars(conn: sqlite3.Connection) -> list[dict]:
+    rows = conn.execute("SELECT id, data_json FROM calendars ORDER BY created_at ASC").fetchall()
+    calendars = []
+    for row in rows:
+        try:
+            data = json.loads(row["data_json"])
+        except json.JSONDecodeError:
+            data = default_snapshot()
+        calendars.append({"id": row["id"], "data": data})
+    return calendars
+
+
+def reminder_already_sent(conn: sqlite3.Connection, calendar_id: str, user_id: str, reminder_type: str, target_date: str) -> bool:
+    row = conn.execute(
+        """
+        SELECT 1 FROM reminder_log
+        WHERE calendar_id=? AND user_id=? AND reminder_type=? AND target_date=?
+        """,
+        (calendar_id, user_id, reminder_type, target_date),
+    ).fetchone()
+    return bool(row)
+
+
+def mark_reminder_sent(conn: sqlite3.Connection, calendar_id: str, user_id: str, reminder_type: str, target_date: str) -> None:
+    conn.execute(
+        """
+        INSERT OR IGNORE INTO reminder_log (calendar_id, user_id, reminder_type, target_date, sent_at)
+        VALUES (?, ?, ?, ?, ?)
+        """,
+        (calendar_id, user_id, reminder_type, target_date, iso_now()),
+    )
+
+
+def send_due_reminders(today: str | None = None) -> int:
+    if not BOT_TOKEN:
+        print("BOT_TOKEN is not set: reminders skipped.")
+        return 0
+    today = today or today_for_reminders()
+    sent_count = 0
+    with get_conn() as conn:
+        for calendar in get_all_calendars(conn):
+            predictions = calendar_predictions(calendar["data"])
+            if not predictions:
+                continue
+            reminders = [
+                (
+                    "period_minus_3",
+                    predictions["threeDaysBeforePeriod"],
+                    "Через 3 дня ожидается менструация. Это ориентировочный прогноз по календарю Cycle Together.",
+                ),
+                (
+                    "period_start",
+                    predictions["nextPeriodStart"],
+                    "Сегодня ожидаемое начало менструации. Если дата изменилась, обновите календарь.",
+                ),
+                (
+                    "ovulation",
+                    predictions["ovulationDate"],
+                    "Сегодня ожидаемая овуляция. Это ориентировочный прогноз по календарю Cycle Together.",
+                ),
+            ]
+            due_messages = [item for item in reminders if item[1] == today]
+            if not due_messages:
+                continue
+            for member in calendar_members(conn, calendar["id"]):
+                user_id = str(member["userId"])
+                if not user_id.isdigit():
+                    continue
+                for reminder_type, target_date, text in due_messages:
+                    if reminder_already_sent(conn, calendar["id"], user_id, reminder_type, target_date):
+                        continue
+                    try:
+                        send_bot_message(int(user_id), text)
+                        mark_reminder_sent(conn, calendar["id"], user_id, reminder_type, target_date)
+                        conn.commit()
+                        sent_count += 1
+                    except Exception as error:
+                        print("Could not send reminder:", repr(error))
+    print(f"Reminder check for {today}: sent {sent_count}.")
+    return sent_count
+
+
 def response_calendar(conn: sqlite3.Connection, user: dict, calendar_id: str) -> dict:
     calendar = load_calendar(conn, user, calendar_id)
     snapshot = snapshot_for_export(calendar["data"], user)
@@ -762,6 +907,21 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
                     }
                 )
                 return
+            if parsed.path == "/api/export-to-chat":
+                if not str(user["id"]).isdigit():
+                    raise ApiError(400, "Отправка backup в чат доступна только внутри Telegram.", "telegram_user_required")
+                calendar_id = ensure_calendar(conn, user)
+                calendar = load_calendar(conn, user, calendar_id)
+                payload = snapshot_for_export(calendar["data"], user)
+                file_name = f"cycle-together-{payload['exportedAt'][:10]}.cycle-together.json"
+                send_bot_document(
+                    int(user["id"]),
+                    file_name,
+                    pretty_json(payload),
+                    "Backup календаря Cycle Together",
+                )
+                self.send_json({"ok": True, "fileName": file_name})
+                return
             if parsed.path == "/api/settings":
                 def update_settings(data: dict) -> None:
                     data["settings"] = normalize_settings(body.get("settings", body))
@@ -935,6 +1095,37 @@ def bot_api(method: str, payload: dict | None = None) -> dict:
         return json.loads(response.read().decode("utf-8"))
 
 
+def bot_api_multipart(method: str, fields: dict[str, str], files: dict[str, tuple[str, bytes, str]]) -> dict:
+    if not BOT_TOKEN:
+        return {"ok": False}
+    boundary = "----CycleTogether" + secrets.token_hex(12)
+    chunks: list[bytes] = []
+    for key, value in fields.items():
+        chunks.append(("--" + boundary + "\r\n").encode("utf-8"))
+        chunks.append((f'Content-Disposition: form-data; name="{key}"\r\n\r\n').encode("utf-8"))
+        chunks.append(str(value).encode("utf-8"))
+        chunks.append(b"\r\n")
+    for key, (filename, content, content_type) in files.items():
+        chunks.append(("--" + boundary + "\r\n").encode("utf-8"))
+        chunks.append(
+            (
+                f'Content-Disposition: form-data; name="{key}"; filename="{filename}"\r\n'
+                f"Content-Type: {content_type}\r\n\r\n"
+            ).encode("utf-8")
+        )
+        chunks.append(content)
+        chunks.append(b"\r\n")
+    chunks.append(("--" + boundary + "--\r\n").encode("utf-8"))
+    body = b"".join(chunks)
+    request = urllib.request.Request(
+        f"https://api.telegram.org/bot{BOT_TOKEN}/{method}",
+        data=body,
+        headers={"Content-Type": "multipart/form-data; boundary=" + boundary},
+    )
+    with urllib.request.urlopen(request, timeout=35) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
 def send_bot_message(chat_id: int, text: str, start_param: str = "") -> None:
     if not PUBLIC_URL:
         text += "\n\nPUBLIC_URL пока не настроен на сервере."
@@ -959,6 +1150,19 @@ def send_bot_message(chat_id: int, text: str, start_param: str = "") -> None:
         "reply_markup": reply_markup,
     }
     bot_api("sendMessage", payload)
+
+
+def send_bot_document(chat_id: int, file_name: str, content: bytes, caption: str = "") -> dict:
+    return bot_api_multipart(
+        "sendDocument",
+        {
+            "chat_id": str(chat_id),
+            "caption": caption,
+        },
+        {
+            "document": (file_name, content, "application/json"),
+        },
+    )
 
 
 def handle_bot_update(update: dict) -> None:

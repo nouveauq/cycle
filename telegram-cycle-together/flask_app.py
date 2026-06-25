@@ -174,6 +174,25 @@ def api_invite():
         )
 
 
+@app.post("/api/export-to-chat")
+def api_export_to_chat():
+    user = authenticate()
+    if not str(user["id"]).isdigit():
+        raise server.ApiError(400, "Отправка backup в чат доступна только внутри Telegram.", "telegram_user_required")
+    with server.get_conn() as conn:
+        calendar_id = server.ensure_calendar(conn, user)
+        calendar = server.load_calendar(conn, user, calendar_id)
+        payload = server.snapshot_for_export(calendar["data"], user)
+        file_name = f"cycle-together-{payload['exportedAt'][:10]}.cycle-together.json"
+        server.send_bot_document(
+            int(user["id"]),
+            file_name,
+            server.pretty_json(payload),
+            "Backup календаря Cycle Together",
+        )
+        return json_response({"ok": True, "fileName": file_name})
+
+
 @app.post("/api/settings")
 def api_settings():
     user = authenticate()

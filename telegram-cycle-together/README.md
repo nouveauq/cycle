@@ -157,6 +157,16 @@ python setup_pythonanywhere_webhook.py
 
 Потом открой вкладку `Web` и нажми `Reload`. Файл `.env` и база в `DATA_DIR` при `git pull` не стираются.
 
+### Ежедневные напоминания на PythonAnywhere
+
+На вкладке `Tasks` создай Scheduled Task один раз в день, например утром. Команда:
+
+```bash
+/home/USERNAME/.virtualenvs/cycle-together-env/bin/python /home/USERNAME/cycle-together/telegram-cycle-together/send_due_reminders.py
+```
+
+Замени `USERNAME` и путь к репозиторию на свои. Скрипт отправляет всем участникам календаря напоминания за 3 дня до ожидаемой менструации, в день ожидаемого начала и в день ожидаемой овуляции. Уже отправленные напоминания записываются в базу и не дублируются.
+
 ## Деплой через Docker
 
 ```powershell

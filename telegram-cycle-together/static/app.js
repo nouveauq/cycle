@@ -534,6 +534,27 @@
   }
 
   function onExportBackup() {
+    if (state.user && String(state.user.id || "").match(/^\d+$/)) {
+      setBackupStatus("Отправляю backup в чат с ботом…");
+      apiFetch("/api/export-to-chat", {
+        method: "POST",
+        body: {},
+      })
+        .then(function (data) {
+          rememberLastBackup(new Date().toISOString());
+          setBackupStatus("Бот отправил файл " + data.fileName + " в чат.");
+        })
+        .catch(function (error) {
+          console.error(error);
+          setBackupStatus("Не удалось отправить через бота. Пробую скачать файл…");
+          downloadBackupInBrowser();
+        });
+      return;
+    }
+    downloadBackupInBrowser();
+  }
+
+  function downloadBackupInBrowser() {
     try {
       var snapshot = buildExportSnapshot();
       var fileName = buildBackupFilename(snapshot.exportedAt);
