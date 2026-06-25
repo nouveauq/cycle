@@ -159,13 +159,30 @@ python setup_pythonanywhere_webhook.py
 
 ### Ежедневные напоминания на PythonAnywhere
 
-На вкладке `Tasks` создай Scheduled Task один раз в день, например утром. Команда:
+На платном PythonAnywhere можно использовать вкладку `Tasks`: создай Scheduled Task один раз в день, например утром. Команда:
 
 ```bash
 /home/USERNAME/.virtualenvs/cycle-together-env/bin/python /home/USERNAME/cycle-together/telegram-cycle-together/send_due_reminders.py
 ```
 
 Замени `USERNAME` и путь к репозиторию на свои. Скрипт отправляет всем участникам календаря напоминания за 3 дня до ожидаемой менструации, в день ожидаемого начала и в день ожидаемой овуляции. Уже отправленные напоминания записываются в базу и не дублируются.
+
+На бесплатном PythonAnywhere вкладка `Tasks` недоступна. Тогда используй бесплатный внешний cron, например https://cron-job.org/:
+
+1. В `.env` добавь секрет, придумай любую длинную строку:
+
+```text
+REMINDER_SECRET=придумай-длинный-секрет-без-пробелов
+```
+
+2. На вкладке `Web` нажми `Reload`.
+3. В cron-job.org создай cronjob раз в день с URL:
+
+```text
+https://USERNAME.pythonanywhere.com/run-reminders/придумай-длинный-секрет-без-пробелов
+```
+
+Метод: `GET`. Этого достаточно, чтобы один раз в день PythonAnywhere получил запрос и отправил due-напоминания.
 
 ## Деплой через Docker
 

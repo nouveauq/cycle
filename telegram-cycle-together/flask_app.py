@@ -107,6 +107,13 @@ def health():
     return json_response({"ok": True, "time": server.iso_now()})
 
 
+@app.get("/run-reminders/<secret>")
+def run_reminders(secret: str):
+    if secret != server.reminder_secret():
+        raise server.ApiError(403, "Неверный reminder secret.", "bad_reminder_secret")
+    return json_response({"ok": True, "sent": server.send_due_reminders()})
+
+
 @app.get("/api/session")
 def api_session():
     user = authenticate()

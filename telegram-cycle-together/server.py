@@ -99,6 +99,15 @@ def today_for_reminders() -> str:
     return datetime.now(tz).date().isoformat()
 
 
+def reminder_secret() -> str:
+    configured = os.environ.get("REMINDER_SECRET", "").strip()
+    if configured:
+        return configured
+    if BOT_TOKEN:
+        return hashlib.sha256(("reminders:" + BOT_TOKEN).encode("utf-8")).hexdigest()[:32]
+    return "dev-reminders"
+
+
 def iso_from_datetime(value: datetime) -> str:
     return value.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -811,6 +820,12 @@ class CycleTogetherHandler(BaseHTTPRequestHandler):
             parsed = urllib.parse.urlparse(self.path)
             if parsed.path == "/health":
                 self.send_json({"ok": True, "time": iso_now()})
+                return
+            if parsed.path.startswith("/run-reminders/"):
+                secret = urllib.parse.unquote(parsed.path.removeprefix("/run-reminders/"))
+                if secret != reminder_secret():
+                    raise ApiError(403, "Неверный reminder secret.", "bad_reminder_secret")
+                self.send_json({"ok": True, "sent": send_due_reminders()})
                 return
             if parsed.path.startswith("/api/"):
                 self.handle_api_get(parsed)
